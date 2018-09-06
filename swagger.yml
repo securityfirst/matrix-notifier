@@ -1,0 +1,207 @@
+openapi: 3.0.0
+info:
+  version: v1
+  title: Matrix Notification
+  description: >
+    Notification system that uses the Matrix identiy system.
+
+    Source code available at
+    [securityfirst/matrix-notifier](https://github.com/securityfirst/matrix-notifier)
+  license:
+    name: MIT
+    url: 'https://github.com/securityfirst/matrix-notifier/blob/v1/LICENSE'
+servers:
+  - url: comms.secfirst.org
+    description: Security First
+paths:
+  '/_matrix/client/r0/organisation':
+    get:
+      summary: List of user's Organisations.
+      security:
+        - AccessToken: []
+      tags:
+        - Organisation
+      responses:
+        '200':
+          description: Organisation description.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+  '/_matrix/client/r0/organisation/{orgID}':
+    parameters:
+      - in: path
+        name: orgID
+        description: Organisation ID
+        schema:
+          type: string
+        required: true
+    get:
+      summary: Shows an organisation.
+      security:
+        - AccessToken: []
+      tags:
+        - Organisation
+      responses:
+        '200':
+          description: Organisation description.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organisation'
+    post:
+      summary: Creates a new organisation and sends an invite link (admin).
+      security:
+        - AccessToken: []
+      tags:
+        - Organisation
+      requestBody:
+        description: Organisation
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organisation'
+      responses:
+        '201':
+          description: Success.
+        '404':
+          description: Invalid request.
+        '409':
+          description: Already used.
+  '/_matrix/client/r0/organisation/{orgID}/invite':
+    parameters:
+      - in: path
+        name: orgID
+        description: Organisation ID
+        schema:
+          type: string
+        required: true
+    post:
+      summary: Sends an invite link.
+      security:
+        - AccessToken: []
+      tags:
+        - Organisation
+      requestBody:
+        description: Invite
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Invite'
+      responses:
+        '201':
+          description: Success.
+        '404':
+          description: Invalid request.
+        '409':
+          description: Already used.
+  # when logged in?
+  '/_matrix/client/r0/organisation/{orgID}/verify':
+    parameters:
+      - in: path
+        name: orgID
+        description: Organisation ID
+        schema:
+          type: string
+        required: true
+    post:
+      summary: Creates a user and adds him to the organisation.
+      security:
+        - AccessToken: []
+      tags:
+        - Organisation
+      responses:
+        '201':
+          description: Success.
+        '404':
+          description: Invalid request.
+        '409':
+          description: Already used.
+  '/_matrix/client/r0/notification':
+    get:
+      tags:
+        - Notification
+      summary: Gets the list of user's notification 
+      security:
+        - AccessToken: []
+      responses:
+        '200':
+          description: List of notification.
+  '/_matrix/client/r0/notification/{notID}/read':
+    parameters:
+      - in: path
+        name: notID
+        description: Notification ID, use `all` for bulk action.
+        schema:
+          type: string
+        required: true
+    patch:
+      tags:
+        - Notification
+      summary: Marks a notification as read.
+      security:
+        - AccessToken: []
+      responses:
+        '204':
+          description: Notification Updated.
+  #'/_matrix/client/r0/organisation/{orgID}/notification':
+  #'/_matrix/client/r0/user/{userID}/notification':
+  # notification can admin only
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    AccessToken:
+      type: apiKey
+      in: query
+      name: access_token
+  schemas:
+    Organisation:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Security First
+        package:
+          type: string
+          example: org.secfirst.umbrella
+        intent:
+          type: string
+          example: 'umbrella://'
+        admin:
+          type: string
+          example: info@secfirst.org
+    Invite:
+      type: object
+      properties:
+        email:
+          type: string
+          example: info@secfirst.org
+        admin:
+          type: boolean
+          example: true
+    Subscription:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Security First
+        admin:
+          type: boolean
+          example: true
+    Notification:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Security First
+        admin:
+          type: boolean
+          example: true
+    
