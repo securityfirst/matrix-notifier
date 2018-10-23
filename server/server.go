@@ -83,7 +83,7 @@ func (s *Server) IsAdmin() gin.HandlerFunc {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
-		if !ou.Admin {
+		if ou.Level == database.LvlUser {
 			ErrUnauthorized.with(errAdmin).abort(c)
 			return
 		}
@@ -169,7 +169,7 @@ func (s *Server) CreateOrganisation() gin.HandlerFunc {
 			return
 		}
 		if req.Admin != "" {
-			if err := s.inviteUser(tx, org.ID, req.Admin, true); err != nil {
+			if err := s.inviteUser(tx, org.ID, req.Admin, database.LvlOwner); err != nil {
 				err.(ErrorResponse).abort(c)
 			}
 		}
@@ -197,7 +197,7 @@ func (s *Server) RedirectToIntent() gin.HandlerFunc {
 // inviteUserRequest is the input of InviteUser.
 type inviteUserRequest struct {
 	Email string `json:"email"`
-	Admin bool   `json:"admin"`
+	Level int    `json:"level"`
 }
 
 // InviteUser redirect to the Organisation intent.
@@ -210,13 +210,13 @@ func (s *Server) InviteUser() gin.HandlerFunc {
 			return
 		}
 		defer closeTransaction(tx, &err)
-		if err = s.inviteUser(tx, c.Param("orgID"), req.Email, req.Admin); err != nil {
+		if err = s.inviteUser(tx, c.Param("orgID"), req.Email, req.Level); err != nil {
 			err.(ErrorResponse).abort(c)
 		}
 	})
 }
 
-func (s *Server) inviteUser(tx *gorp.Transaction, orgID string, email string, admin bool) error {
+func (s *Server) inviteUser(tx *gorp.Transaction, orgID string, email string, lvl int) error {
 	m, err := mail.ParseAddress(email)
 	if err != nil {
 		return ErrBadEmail
@@ -225,7 +225,7 @@ func (s *Server) inviteUser(tx *gorp.Transaction, orgID string, email string, ad
 	ou := database.OrganisationUser{
 		OrganisationID: orgID,
 		Hash:           hash,
-		Admin:          admin,
+		Level:          lvl,
 	}
 	if err := database.Create(tx, &ou); err != nil {
 		if database.IsDuplicate(err) {
