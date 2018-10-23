@@ -35,7 +35,7 @@ type DB interface {
 
 // InitDBMap initializes the DbMap and creates the tables.
 func InitDBMap(d *gorp.DbMap) error {
-	for _, t := range []table{Organisation{}, OrganisationUser{}, Notification{}} {
+	for _, t := range []table{Organisation{}, OrganisationUser{}, Notification{}, UserThreepid{}} {
 		table := d.AddTableWithName(t, t.name())
 		for i, s := range t.unique() {
 			switch {
@@ -99,7 +99,12 @@ func UpdateOrganisationUser(d DB, userID, hash string) error {
 	return nil
 }
 
-// FindUserByToken returns the username ith the selected Token.
+// FindEmailByUser returns the email for the selected User.
+func FindEmailByUser(d DB, userID string) (string, error) {
+	return d.SelectStr("select address from user_threepids where user_id = $1 and medium = $2", userID, "email")
+}
+
+// FindUserByToken returns the username with the selected Token.
 func FindUserByToken(d DB, token string) (string, error) {
 	return d.SelectStr("select user_id from access_tokens where token = $1", token)
 }

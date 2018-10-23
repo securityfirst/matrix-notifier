@@ -1,5 +1,11 @@
 package database
 
+const (
+	LvlUser = iota
+	LvlAdmin
+	LvlOwner
+)
+
 type table interface {
 	name() string
 	unique() [][]string
@@ -25,7 +31,7 @@ type OrganisationUser struct {
 	OrganisationID string `db:"organisation_id"`
 	UserID         string `db:"user_id"`
 	Hash           string `db:"hash"`
-	Admin          bool   `db:"admin"`
+	Level          int    `db:"admin"`
 }
 
 func (OrganisationUser) name() string { return "organisation_user" }
@@ -42,6 +48,10 @@ type UserThreepid struct {
 	ValidatedAt int64  `db:"validated_at"`
 	AddedAt     int64  `db:"added_at"`
 }
+
+func (UserThreepid) name() string { return "user_threepids" }
+
+func (UserThreepid) unique() [][]string { return nil }
 
 // Notification is the notification model.
 type Notification struct {
