@@ -31,6 +31,9 @@ func NewServer(address string, db *gorp.DbMap, c *gomatrix.Client, m Mailer, sec
 
 	auth := engine.Use(s.Authenticate())
 	auth.POST("/_matrix/client/r0/organisation/:orgID", s.ParseRequest(createOrganisationRequest{}), s.CreateOrganisation())
+	auth.GET("/_matrix/client/r0/notification", s.ViewNotifications())
+	auth.POST("/_matrix/client/r0/notification", s.PostNotifications())
+	auth.PATCH("/_matrix/client/r0/notification/:id/read", s.ReadNotifications())
 
 	admin := auth.Use(s.IsAdmin())
 	admin.POST("/_matrix/client/r0/organisation/:orgID/invite", s.ParseRequest(inviteUserRequest{}), s.InviteUser())
