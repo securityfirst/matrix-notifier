@@ -1,16 +1,10 @@
 package server
 
 import (
-	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/mail"
-	"reflect"
 	"time"
 
 	"gopkg.in/gorp.v2"
@@ -20,61 +14,6 @@ import (
 
 	"github.com/securityfirst/matrix-notifier/database"
 )
-
-// NewServer returns a new Server.
-func NewServer(address string, db *gorp.DbMap, c *gomatrix.Client, m Mailer, secret []byte) *Server {
-	engine := gin.Default()
-	s := Server{
-		server:   &http.Server{Addr: address, Handler: engine},
-		db:       db,
-		matrix:   c,
-		mailer:   m,
-		verifier: verifier(secret),
-	}
-
-	engine.GET("/_matrix/client/r0/organisation/:orgID/verify", s.RedirectToIntent())
-	engine.POST("/_matrix/client/r0/organisation/:orgID/verify", s.ParseRequest(createUserRequest{}), s.CreateUser())
-
-	auth := engine.Use(s.Authenticate())
-	auth.POST("/_matrix/client/r0/organisation/:orgID", s.ParseRequest(createOrganisationRequest{}), s.CreateOrganisation())
-	admin := auth.Use(s.IsAdmin())
-	admin.POST("/_matrix/client/r0/organisation/:orgID/invite", s.ParseRequest(inviteUserRequest{}), s.InviteUser())
-
-	return &s
-}
-
-// Server is a gin handler generator.
-type Server struct {
-	server   *http.Server
-	db       *gorp.DbMap
-	matrix   *gomatrix.Client
-	mailer   Mailer
-	verifier verifier
-}
-
-// Run starts the Server.
-func (s *Server) Run() error { return s.server.ListenAndServe() }
-
-// Shutdown closes the server
-func (s *Server) Shutdown(ctx context.Context) error { return s.server.Shutdown(ctx) }
-
-// ParseRequest parses the request into a v element, that must be a pointer.
-func (s *Server) ParseRequest(v interface{}) gin.HandlerFunc {
-	base := reflect.TypeOf(v)
-	if base.Kind() != reflect.Struct {
-		panic("interface must be a struct")
-	}
-	return gin.HandlerFunc(func(c *gin.Context) {
-		defer c.Request.Body.Close()
-		v := reflect.New(base).Interface()
-		log.Printf("Parsing request in %T", v)
-		if err := c.BindJSON(v); err != nil {
-			ErrBadJSON.abort(c)
-			return
-		}
-		c.Set("request", v)
-	})
-}
 
 // IsAdmin checks that the current User is admin for the Organisation.
 func (s *Server) IsAdmin() gin.HandlerFunc {
@@ -118,87 +57,6 @@ func (s *Server) authenticate(c *gin.Context) (string, error) {
 		return "", ErrUnknownToken
 	}
 	return user, nil
-}
-
-// ListUserOrganisations returns Organisations for the user associated with provided token.
-func (s *Server) ListUserOrganisations() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		orgs, err := database.ListOrganisations(s.db, c.MustGet("user").(string))
-		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		c.JSON(http.StatusOK, orgs)
-	})
-}
-
-// GetOrganisation returns an Organisation.
-func (s *Server) GetOrganisation() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		org, err := s.db.Get(&database.Organisation{}, c.Param("orgID"))
-		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		if org == nil {
-			c.JSON(http.StatusNotFound, ErrUnknownOrg)
-		}
-		c.JSON(http.StatusOK, org)
-	})
-}
-
-// createOrganisationRequest is the input of CreateOrganisation.
-type createOrganisationRequest struct {
-	Name    string `json:"name"`
-	Intent  string `json:"intent"`
-	Package string `json:"package"`
-	Admin   string `json:"admin"`
-}
-
-// CreateOrganisation returns an Organisation.
-func (s *Server) CreateOrganisation() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		req := c.MustGet("request").(*createOrganisationRequest)
-		org := database.Organisation{
-			ID:      c.Param("orgID"),
-			Name:    req.Name,
-			Package: req.Package,
-			Intent:  req.Intent,
-		}
-		tx, err := s.db.Begin()
-		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		defer closeTransaction(tx, &err)
-		if err = database.Create(tx, &org); err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		if req.Admin != "" {
-			if err := s.inviteUser(tx, org.ID, req.Admin, database.LvlOwner); err != nil {
-				err.(ErrorResponse).abort(c)
-			}
-		}
-		c.Status(http.StatusCreated)
-	})
-}
-
-// RedirectToIntent redirect to the Organisation intent.
-func (s *Server) RedirectToIntent() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		ou, err := database.FindOrganisationUserByHash(s.db, c.Query("hash"))
-		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		org, err := database.Get(s.db, &database.Organisation{}, ou.OrganisationID)
-		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
-		}
-		c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s://verify?hash=%s", org.(*database.Organisation).Intent, c.Query("hash")))
-	})
 }
 
 // inviteUserRequest is the input of InviteUser.
@@ -342,24 +200,4 @@ func (s *Server) CreateUser() gin.HandlerFunc {
 			c.Status(http.StatusCreated)
 		}
 	})
-}
-
-func closeTransaction(tx *gorp.Transaction, err *error) {
-	if err := *err; err != nil {
-		if err := tx.Rollback(); err != nil {
-			log.Println("Rollback error:", err)
-		}
-	} else {
-		if err := tx.Commit(); err != nil {
-			log.Println("Commit error:", err)
-		}
-	}
-}
-
-type verifier []byte
-
-func (v verifier) Hash(orgID string, email string) string {
-	h := hmac.New(sha256.New, []byte(v))
-	h.Write([]byte(email))
-	return hex.EncodeToString(h.Sum([]byte(orgID)))
 }

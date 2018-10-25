@@ -1,5 +1,10 @@
 package database
 
+import (
+	"database/sql/driver"
+	"encoding/json"
+)
+
 const (
 	LvlUser = iota
 	LvlAdmin
@@ -55,20 +60,46 @@ func (UserThreepid) unique() [][]string { return nil }
 
 // Notification is the notification model.
 type Notification struct {
-	ID          string `db:"id,primarykey"`
-	UserID      string `db:"user_id"`
-	Type        string `db:"type"`
-	Destination string `db:"destination"`
-	CollapseKey string `db:"collapse_key"`
-	Content     string `db:"content"`
-	AdminOnly   bool   `db:"admin_only"`
-	CreatedAt   int64  `db:"created_at"`
+	ID          string   `db:"id,primarykey"`
+	UserID      string   `db:"user_id"`
+	Destination string   `db:"destination"`
+	Priority    int      `db:"priority"`
+	CreatedAt   int64    `db:"created_at"`
+	Content     *Content `db:"content"`
 }
 
 func (Notification) name() string { return "notification" }
 
 func (Notification) unique() [][]string {
 	return [][]string{[]string{"id"}}
+}
+
+type Content struct {
+	Type        string   `json:"type"`
+	Private     bool     `json:"private,omitempty"`
+	Text        string   `json:"text"`
+	CollapseKey string   `json:"collapse_key,omitempty"`
+	Answer      string   `json:"answer,omitempty"`
+	Choices     []Choice `json:"choices,omitempty"`
+}
+
+type Choice struct {
+	Label string
+	Value string
+}
+
+// Value encodes a sql value
+func (c Content) Value() (driver.Value, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+// Scan decodes a sql value
+func (c *Content) Scan(value interface{}) error {
+	return json.Unmarshal(value.([]byte), c)
 }
 
 type AccessToken struct {
