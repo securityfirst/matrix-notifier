@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/mail"
 	"reflect"
+	"time"
 
 	"gopkg.in/gorp.v2"
 
@@ -95,22 +96,28 @@ func (s *Server) IsAdmin() gin.HandlerFunc {
 // Authenticate saves the user associated with the token provided in query.
 func (s *Server) Authenticate() gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
-		token := c.Query("access_token")
-		if token == "" {
-			ErrMissingToken.abort(c)
-			return
-		}
-		user, err := database.FindUserByToken(s.db, token)
+		u, err := s.authenticate(c)
 		if err != nil {
-			ErrUnknown.with(err).abort(c)
+			err.(ErrorResponse).abort(c)
 			return
 		}
-		if user == "" {
-			ErrUnknownToken.abort(c)
-			return
-		}
-		c.Set("user", user)
+		c.Set("user", u)
 	})
+}
+
+func (s *Server) authenticate(c *gin.Context) (string, error) {
+	token := c.Query("access_token")
+	if token == "" {
+		return "", ErrMissingToken
+	}
+	user, err := database.FindUserByToken(s.db, token)
+	if err != nil {
+		return "", ErrUnknown.with(err)
+	}
+	if user == "" {
+		return "", ErrUnknownToken
+	}
+	return user, nil
 }
 
 // ListUserOrganisations returns Organisations for the user associated with provided token.
@@ -197,7 +204,7 @@ func (s *Server) RedirectToIntent() gin.HandlerFunc {
 // inviteUserRequest is the input of InviteUser.
 type inviteUserRequest struct {
 	Email string `json:"email"`
-	Level int    `json:"level"`
+	Admin bool   `json:"admin"`
 }
 
 // InviteUser redirect to the Organisation intent.
@@ -209,8 +216,12 @@ func (s *Server) InviteUser() gin.HandlerFunc {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
+		lvl := database.LvlUser
+		if req.Admin {
+			lvl = database.LvlAdmin
+		}
 		defer closeTransaction(tx, &err)
-		if err = s.inviteUser(tx, c.Param("orgID"), req.Email, req.Level); err != nil {
+		if err = s.inviteUser(tx, c.Param("orgID"), req.Email, lvl); err != nil {
 			err.(ErrorResponse).abort(c)
 		}
 	})
@@ -256,7 +267,7 @@ type createUserRequest struct {
 	Secret   string
 }
 
-// CreateUser creates a user.
+// CreateUser creates a user and adds it to an organisation.
 func (s *Server) CreateUser() gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
 		req := c.MustGet("request").(*createUserRequest)
@@ -266,6 +277,20 @@ func (s *Server) CreateUser() gin.HandlerFunc {
 			return
 		}
 		defer closeTransaction(tx, &err)
+
+		user, err := s.authenticate(c)
+		if err != nil && err != ErrMissingToken {
+			err.(ErrorResponse).abort(c)
+			return
+		}
+		if user != "" {
+			req.Email, err = database.FindEmailByUser(s.db, user)
+			if err != nil {
+				ErrUnknown.with(err).abort(c)
+				return
+			}
+		}
+
 		hash := s.verifier.Hash(c.Param("orgID"), req.Email)
 		if hash != req.Secret {
 			ErrUnauthorized.with(errors.New("Secret mismatch.")).abort(c)
@@ -275,19 +300,47 @@ func (s *Server) CreateUser() gin.HandlerFunc {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
-		resp, err := s.matrix.RegisterDummy(&gomatrix.ReqRegister{
-			Username: req.Username,
-			Password: req.Password,
-		})
-		if err != nil {
+		var resp interface{}
+		if user == "" {
+			r, err := s.matrix.RegisterDummy(&gomatrix.ReqRegister{
+				Username: req.Username,
+				Password: req.Password,
+			})
+			if err != nil {
+				if e, ok := err.(gomatrix.RespError); ok {
+					ErrorResponse{
+						Status: http.StatusBadRequest,
+						Code:   e.ErrCode,
+						Err:    e.Err,
+					}.abort(c)
+					return
+				}
+				ErrUnknown.with(err).abort(c)
+				return
+			}
+			user = r.UserID
+			now := time.Now().UTC().Unix()
+			if err := database.Create(s.db, &database.UserThreepid{
+				UserID:      user,
+				Medium:      "email",
+				Address:     req.Email,
+				ValidatedAt: now,
+				AddedAt:     now,
+			}); err != nil {
+				ErrUnknown.with(err).abort(c)
+				return
+			}
+			resp = r
+		}
+		if err := database.UpdateOrganisationUser(tx, user, hash); err != nil {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
-		if err := database.UpdateOrganisationUser(tx, resp.UserID, hash); err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
+		if resp != nil {
+			c.JSON(http.StatusCreated, resp)
+		} else {
+			c.Status(http.StatusCreated)
 		}
-		c.JSON(http.StatusCreated, resp)
 	})
 }
 
