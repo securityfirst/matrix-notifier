@@ -149,6 +149,14 @@
   version = "1.0.1"
 
 [[projects]]
+  digest = "1:4f5513cb656b73fb4c4f77ccd482c8366d6290278564d2b1d3285f45e45f4a1e"
+  name = "github.com/oklog/ulid"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "02a8604050d8466dd915307496174adb9be4593a"
+  version = "v1.3.1"
+
+[[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
   name = "github.com/pelletier/go-toml"
   packages = ["."]
@@ -271,6 +279,7 @@
     "github.com/lib/pq",
     "github.com/matrix-org/gomatrix",
     "github.com/mitchellh/go-homedir",
+    "github.com/oklog/ulid",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
     "gopkg.in/gorp.v2",

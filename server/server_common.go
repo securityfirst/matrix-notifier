@@ -6,14 +6,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"math/rand"
 	"net/http"
 	"reflect"
+	"time"
+
+	"github.com/oklog/ulid"
 
 	"gopkg.in/gorp.v2"
 
 	"github.com/gin-gonic/gin"
 	"github.com/matrix-org/gomatrix"
 )
+
+var entropy = ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
 
 // NewServer returns a new Server.
 func NewServer(address string, db *gorp.DbMap, c *gomatrix.Client, m Mailer, secret []byte) *Server {

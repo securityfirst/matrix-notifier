@@ -60,12 +60,14 @@ func (UserThreepid) unique() [][]string { return nil }
 
 // Notification is the notification model.
 type Notification struct {
-	ID          string   `db:"id,primarykey"`
-	UserID      string   `db:"user_id"`
-	Destination string   `db:"destination"`
-	Priority    int      `db:"priority"`
-	CreatedAt   int64    `db:"created_at"`
-	Content     *Content `db:"content"`
+	ID          string           `db:"id,primarykey"`
+	UserID      string           `db:"user_id"`
+	Destination string           `db:"destination"`
+	Priority    int              `db:"priority"`
+	CreatedAt   int64            `db:"created_at"`
+	Type        NotificationType `db:"type"`
+	Private     bool             `db:"private"`
+	Content     *Content         `db:"content"`
 }
 
 func (Notification) name() string { return "notification" }
@@ -74,12 +76,20 @@ func (Notification) unique() [][]string {
 	return [][]string{[]string{"id"}}
 }
 
+type NotificationType string
+
+// List fo NotificationType.
+const (
+	NotificationSimple   NotificationType = "simple"
+	NotificationPanic    NotificationType = "panic"
+	NotificationQuestion NotificationType = "question"
+	NotificationAnswer   NotificationType = "answer"
+)
+
 type Content struct {
-	Type        string   `json:"type"`
-	Private     bool     `json:"private,omitempty"`
 	Text        string   `json:"text"`
 	CollapseKey string   `json:"collapse_key,omitempty"`
-	Answer      string   `json:"answer,omitempty"`
+	QuestionID  string   `json:"question_id,omitempty"`
 	Choices     []Choice `json:"choices,omitempty"`
 }
 

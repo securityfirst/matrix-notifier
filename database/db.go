@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/lib/pq"
 
@@ -125,4 +126,13 @@ func FindOrganisationUserByUserOrg(d DB, userID, orgID string) (*OrganisationUse
 		return nil, err
 	}
 	return &ou, nil
+}
+
+// ListNotifications returns a list of the unread notifications for the selected User since the specified time.
+func ListNotifications(d DB, userID string, since time.Time) (list []Notification, err error) {
+	_, err = d.Select(&list, `select n.* from organisation_user u, notification n where 
+		n.destination = u.organisation_id and 
+		(u.admin or n.type = 'question' or n.private) and 
+		u.user_id = $1 and n.created_at = $2`, userID, since)
+	return
 }
