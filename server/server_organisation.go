@@ -64,7 +64,7 @@ func (s *Server) CreateOrganisation() gin.HandlerFunc {
 			return
 		}
 		if req.Admin != "" {
-			if err := s.inviteUser(tx, org.ID, req.Admin, database.LvlOwner); err != nil {
+			if err := s.inviteUser(tx, org.ID, req.Admin, LvlOwner); err != nil {
 				err.(ErrorResponse).abort(c)
 			}
 		}

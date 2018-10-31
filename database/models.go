@@ -5,12 +5,6 @@ import (
 	"encoding/json"
 )
 
-const (
-	LvlUser = iota
-	LvlAdmin
-	LvlOwner
-)
-
 type table interface {
 	name() string
 	unique() [][]string
@@ -65,7 +59,7 @@ type Notification struct {
 	Destination string   `db:"destination" json:"destination"`
 	Priority    int      `db:"priority" json:"priority"`
 	CreatedAt   int64    `db:"created_at" json:"created_at"`
-	Type        NType    `db:"type" json:"type"`
+	Type        string   `db:"type" json:"type"`
 	Content     *Content `db:"content" json:"content"`
 	ReadAt      int64    `db:"-" json:"reat_at"`
 }
@@ -75,20 +69,6 @@ func (Notification) name() string { return "notification" }
 func (Notification) unique() [][]string {
 	return [][]string{[]string{"id"}}
 }
-
-// NType is Notification Type
-type NType string
-
-// List fo NType.
-const (
-	NPanic        NType = "panic"        // Panic, sent by user, seen by user
-	NBroadcast    NType = "broadcast"    // Broadcast, sent by admin, seen by admin
-	NAnnouncement NType = "announcement" // Announcement, sent by admin, seen by user
-	NQuestion     NType = "question"     // Question, sent by admin, seen by user
-	NAnswer       NType = "answer"       // Answer, sent by admin, seen by user, requires Question
-	NPool         NType = "pool  "       // Pool, sent by admin, seen by user
-	NVote         NType = "vote"         // Vote, sent by admin, seen by admin, requires Pool
-)
 
 type Content struct {
 	Text        string   `json:"text"`

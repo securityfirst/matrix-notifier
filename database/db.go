@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/lib/pq"
 
@@ -128,8 +129,13 @@ func FindOrganisationUserByUserOrg(d DB, userID, orgID string) (*OrganisationUse
 }
 
 // ListNotifications returns a list of the unread notifications for the selected User since the specified time.
-func ListNotifications(d DB, userID string, since int64) ([]Notification, error) {
-	const query = `
+func ListNotifications(d DB, userID string, since int64, types ...string) ([]Notification, error) {
+	var (
+		query = &strings.Builder{}
+		args  = make([]interface{}, 2, len(types)+2)
+	)
+	args[0], args[1] = userID, since
+	fmt.Fprint(query, `
 select
         n.*, coalesce(read_at,0) as read_at
 from
@@ -140,12 +146,25 @@ where
         ou.user_id = $1 and
         n.created_at >= $2 and
         n.destination = ou.organisation_id and
-        (ou.admin > 0 or n.type in ('panic','announcement', 'question','answer', 'pool'))`
+        (ou.admin > 0`)
+	if len(types) != 0 {
+		fmt.Fprint(query, " or n.type in (")
+		for i, t := range types {
+			args = append(args, t)
+			if i != 0 {
+				fmt.Fprint(query, ", ")
+			}
+			fmt.Fprintf(query, "$%d", len(args))
+		}
+		fmt.Fprint(query, `)`)
+	}
+	fmt.Fprint(query, `)`)
+
 	var l []struct {
 		Notification
 		ReadAt int64 `db:"read_at"`
 	}
-	if _, err := d.Select(&l, query, userID, since); err != nil {
+	if _, err := d.Select(&l, query.String(), args...); err != nil {
 		return nil, err
 	}
 	var list = make([]Notification, len(l))

@@ -21,6 +21,24 @@ import (
 
 var entropy = ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
 
+// List of Notification Types
+const (
+	NPanic        = "panic"        // Panic, sent by user, seen by user
+	NBroadcast    = "broadcast"    // Broadcast, sent by admin, seen by admin
+	NAnnouncement = "announcement" // Announcement, sent by admin, seen by user
+	NQuestion     = "question"     // Question, sent by admin, seen by user
+	NAnswer       = "answer"       // Answer, sent by admin, seen by user, requires Question
+	NPool         = "pool  "       // Pool, sent by admin, seen by user
+	NVote         = "vote"         // Vote, sent by admin, seen by admin, requires Pool
+)
+
+// List of Levels
+const (
+	LvlUser = iota
+	LvlAdmin
+	LvlOwner
+)
+
 // NewServer returns a new Server.
 func NewServer(address string, db *gorp.DbMap, c *gomatrix.Client, m Mailer, secret []byte) *Server {
 	engine := gin.Default()

@@ -23,7 +23,7 @@ func (s *Server) IsAdmin() gin.HandlerFunc {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
-		if ou.Level == database.LvlUser {
+		if ou.Level == LvlUser {
 			ErrUnauthorized.with(errAdmin).abort(c)
 			return
 		}
@@ -74,9 +74,9 @@ func (s *Server) InviteUser() gin.HandlerFunc {
 			ErrUnknown.with(err).abort(c)
 			return
 		}
-		lvl := database.LvlUser
+		lvl := LvlUser
 		if req.Admin {
-			lvl = database.LvlAdmin
+			lvl = LvlAdmin
 		}
 		defer closeTransaction(tx, &err)
 		if err = s.inviteUser(tx, c.Param("orgID"), req.Email, lvl); err != nil {

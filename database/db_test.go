@@ -63,7 +63,7 @@ func org(s string) *Organisation {
 func ou(o, u string, l int) *OrganisationUser {
 	return &OrganisationUser{UserID: "user" + u, OrganisationID: "org" + o, Level: l, Hash: o + "-" + u}
 }
-func not(id, o, u string, t NType, created int64) *Notification {
+func not(id, o, u, t string, created int64) *Notification {
 	return &Notification{ID: id, UserID: "user" + u, Destination: "org" + o, Type: t, CreatedAt: created}
 }
 
@@ -78,20 +78,18 @@ func TestQueries(t *testing.T) {
 		ou("1", "1", LvlOwner), ou("2", "1", LvlUser),
 		ou("2", "2", LvlOwner), ou("3", "2", LvlUser),
 		ou("3", "3", LvlOwner), ou("1", "3", LvlUser),
-		not("0001", "1", "1", NBroadcast, now),
-		not("0002", "1", "1", NAnnouncement, now),
-		not("0003", "1", "1", NQuestion, now),
-		not("0004", "1", "1", NPool, now),
-		not("0005", "1", "1", NPanic, now),
-		not("0006", "1", "1", NAnswer, now),
-		not("0007", "1", "1", NPool, now),
-		not("0011", "3", "3", NBroadcast, now),
-		not("0012", "3", "3", NAnnouncement, now),
-		not("0013", "3", "3", NQuestion, now),
-		not("0014", "3", "3", NPool, now),
-		not("0015", "3", "3", NPanic, now),
-		not("0016", "3", "3", NAnswer, now),
-		not("0017", "3", "3", NPool, now),
+		not("0001", "1", "1", "a", now),
+		not("0002", "1", "1", "b", now),
+		not("0003", "1", "1", "c", now),
+		not("0004", "1", "1", "d", now),
+		not("0005", "1", "1", "e", now),
+		not("0006", "1", "1", "f", now),
+		not("0011", "3", "3", "a", now),
+		not("0012", "3", "3", "b", now),
+		not("0013", "3", "3", "c", now),
+		not("0014", "3", "3", "d", now),
+		not("0015", "3", "3", "e", now),
+		not("0016", "3", "3", "f", now),
 		nu("0001", "1", now), nu("0002", "1", now), nu("0003", "1", now),
 		nu("0002", "3", now), nu("0003", "3", now), nu("0011", "3", now), nu("0012", "3", now),
 	}
@@ -100,13 +98,13 @@ func TestQueries(t *testing.T) {
 			log.Fatal(r, err)
 		}
 	}
-	for user, count := range map[string][2]int{"user1": [2]int{7, 3}, "user2": [2]int{4, 0}, "user3": [2]int{11, 4}} {
-		list, err := ListNotifications(dbMap, user, now)
+	for user, count := range map[string][2]int{"user1": [2]int{6, 3}, "user2": [2]int{4, 0}, "user3": [2]int{10, 4}} {
+		list, err := ListNotifications(dbMap, user, now, "a", "b", "c", "d")
 		if err != nil {
 			log.Fatal(err)
 		}
 		if l := len(list); l != count[0] {
-			for l := range list {
+			for _, l := range list {
 				log.Printf("%#v", l)
 			}
 			log.Fatalf("%s: expected %d, got %d", user, count[0], l)
@@ -118,6 +116,9 @@ func TestQueries(t *testing.T) {
 			}
 		}
 		if read != count[1] {
+			for _, l := range list {
+				log.Printf("%#v", l)
+			}
 			log.Fatalf("%s: expected %d, got %d", user, count[1], read)
 		}
 	}
