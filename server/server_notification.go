@@ -20,7 +20,7 @@ func (s *Server) ViewNotifications() gin.HandlerFunc {
 			}
 			since = t
 		}
-		list, err := database.ListNotifications(s.db, c.MustGet("user").(string), since)
+		list, err := database.ListNotifications(s.db, c.MustGet("user").(string), since.Unix())
 		if err != nil {
 			ErrUnknown.with(err).abort(c)
 			return

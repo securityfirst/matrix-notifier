@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/lib/pq"
 
@@ -36,7 +35,7 @@ type DB interface {
 
 // InitDBMap initializes the DbMap and creates the tables.
 func InitDBMap(d *gorp.DbMap) error {
-	for _, t := range []table{Organisation{}, OrganisationUser{}, Notification{}, UserThreepid{}} {
+	for _, t := range []table{Organisation{}, OrganisationUser{}, Notification{}, NotificationUser{}, User{}, UserThreepid{}} {
 		table := d.AddTableWithName(t, t.name())
 		for i, s := range t.unique() {
 			switch {
@@ -129,10 +128,30 @@ func FindOrganisationUserByUserOrg(d DB, userID, orgID string) (*OrganisationUse
 }
 
 // ListNotifications returns a list of the unread notifications for the selected User since the specified time.
-func ListNotifications(d DB, userID string, since time.Time) (list []Notification, err error) {
-	_, err = d.Select(&list, `select n.* from organisation_user u, notification n where 
-		n.destination = u.organisation_id and 
-		(u.admin or n.type = 'question' or n.private) and 
-		u.user_id = $1 and n.created_at = $2`, userID, since)
-	return
+func ListNotifications(d DB, userID string, since int64) ([]Notification, error) {
+	const query = `
+select
+        n.*, coalesce(read_at,0) as read_at
+from
+        notification n join organisation_user ou on (ou.organisation_id = n.destination)
+        left join notification_user u on (n.id = u.notification_id and u.user_id = $1)
+        
+where
+        ou.user_id = $1 and
+        n.created_at >= $2 and
+        n.destination = ou.organisation_id and
+        (ou.admin > 0 or n.type in ('panic','announcement', 'question','answer', 'pool'))`
+	var l []struct {
+		Notification
+		ReadAt int64 `db:"read_at"`
+	}
+	if _, err := d.Select(&l, query, userID, since); err != nil {
+		return nil, err
+	}
+	var list = make([]Notification, len(l))
+	for i := range l {
+		list[i] = l[i].Notification
+		list[i].ReadAt = l[i].ReadAt
+	}
+	return list, nil
 }

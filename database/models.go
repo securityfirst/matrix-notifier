@@ -60,14 +60,14 @@ func (UserThreepid) unique() [][]string { return nil }
 
 // Notification is the notification model.
 type Notification struct {
-	ID          string           `db:"id,primarykey"`
-	UserID      string           `db:"user_id"`
-	Destination string           `db:"destination"`
-	Priority    int              `db:"priority"`
-	CreatedAt   int64            `db:"created_at"`
-	Type        NotificationType `db:"type"`
-	Private     bool             `db:"private"`
-	Content     *Content         `db:"content"`
+	ID          string   `db:"id,primarykey" json:"id"`
+	UserID      string   `db:"user_id" json:"user_id"`
+	Destination string   `db:"destination" json:"destination"`
+	Priority    int      `db:"priority" json:"priority"`
+	CreatedAt   int64    `db:"created_at" json:"created_at"`
+	Type        NType    `db:"type" json:"type"`
+	Content     *Content `db:"content" json:"content"`
+	ReadAt      int64    `db:"-" json:"reat_at"`
 }
 
 func (Notification) name() string { return "notification" }
@@ -76,20 +76,25 @@ func (Notification) unique() [][]string {
 	return [][]string{[]string{"id"}}
 }
 
-type NotificationType string
+// NType is Notification Type
+type NType string
 
-// List fo NotificationType.
+// List fo NType.
 const (
-	NotificationSimple   NotificationType = "simple"
-	NotificationPanic    NotificationType = "panic"
-	NotificationQuestion NotificationType = "question"
-	NotificationAnswer   NotificationType = "answer"
+	NPanic        NType = "panic"        // Panic, sent by user, seen by user
+	NBroadcast    NType = "broadcast"    // Broadcast, sent by admin, seen by admin
+	NAnnouncement NType = "announcement" // Announcement, sent by admin, seen by user
+	NQuestion     NType = "question"     // Question, sent by admin, seen by user
+	NAnswer       NType = "answer"       // Answer, sent by admin, seen by user, requires Question
+	NPool         NType = "pool  "       // Pool, sent by admin, seen by user
+	NVote         NType = "vote"         // Vote, sent by admin, seen by admin, requires Pool
 )
 
 type Content struct {
 	Text        string   `json:"text"`
 	CollapseKey string   `json:"collapse_key,omitempty"`
 	QuestionID  string   `json:"question_id,omitempty"`
+	PoolID      string   `json:"pool_id,omitempty"`
 	Choices     []Choice `json:"choices,omitempty"`
 }
 
@@ -99,7 +104,10 @@ type Choice struct {
 }
 
 // Value encodes a sql value
-func (c Content) Value() (driver.Value, error) {
+func (c *Content) Value() (driver.Value, error) {
+	if c == nil {
+		return nil, nil
+	}
 	b, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
@@ -112,6 +120,18 @@ func (c *Content) Scan(value interface{}) error {
 	return json.Unmarshal(value.([]byte), c)
 }
 
+type NotificationUser struct {
+	NotificationID string `db:"notification_id"`
+	UserID         string `db:"user_id"`
+	ReadAt         int64  `db:"read_at"`
+}
+
+func (NotificationUser) name() string { return "notification_user" }
+
+func (NotificationUser) unique() [][]string {
+	return [][]string{[]string{"notification_id", "user_id"}}
+}
+
 type AccessToken struct {
 	ID       string `db:"id"`
 	UserID   string `db:"user_id"`
@@ -119,3 +139,19 @@ type AccessToken struct {
 	Token    string `db:"token"`
 	LastUsed string `db:"last_used"`
 }
+
+type User struct {
+	Name                    string `db:"name"`
+	PasswordHash            string `db:"password_hash"`
+	CreationTS              int64  `db:"creation_ts"`
+	Admin                   bool   `db:"admin"`
+	UpgradeTS               int64  `db:"upgrade_ts"`
+	IsGuest                 bool   `db:"is_guest"`
+	AppserviceID            string `db:"appservice_id"`
+	ConsentVersion          string `db:"consent_version"`
+	ConsentServerNoticeSent string `db:"consent_server_notice_sent"`
+}
+
+func (User) name() string { return "users" }
+
+func (User) unique() [][]string { return [][]string{[]string{"name"}} }
