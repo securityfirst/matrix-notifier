@@ -75,9 +75,9 @@ func TestQueries(t *testing.T) {
 	now := time.Now().Unix()
 	records := []interface{}{
 		user("1"), user("2"), user("3"), org("1"), org("2"), org("3"),
-		ou("1", "1", LvlOwner), ou("2", "1", LvlUser),
-		ou("2", "2", LvlOwner), ou("3", "2", LvlUser),
-		ou("3", "3", LvlOwner), ou("1", "3", LvlUser),
+		ou("1", "1", 1), ou("2", "1", 0),
+		ou("2", "2", 1), ou("3", "2", 0),
+		ou("3", "3", 1), ou("1", "3", 0),
 		not("0001", "1", "1", "a", now),
 		not("0002", "1", "1", "b", now),
 		not("0003", "1", "1", "c", now),

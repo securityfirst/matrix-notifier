@@ -27,9 +27,9 @@ const (
 	NBroadcast    = "broadcast"    // Broadcast, sent by admin, seen by admin
 	NAnnouncement = "announcement" // Announcement, sent by admin, seen by user
 	NQuestion     = "question"     // Question, sent by admin, seen by user
-	NAnswer       = "answer"       // Answer, sent by admin, seen by user, requires Question
+	NAnswer       = "answer"       // Answer, sent by user, seen by user, requires Question
 	NPool         = "pool  "       // Pool, sent by admin, seen by user
-	NVote         = "vote"         // Vote, sent by admin, seen by admin, requires Pool
+	NVote         = "vote"         // Vote, sent by user, seen by admin, requires Pool
 )
 
 // List of Levels
@@ -56,7 +56,7 @@ func NewServer(address string, db *gorp.DbMap, c *gomatrix.Client, m Mailer, sec
 	auth := engine.Use(s.Authenticate())
 	auth.POST("/_matrix/client/r0/organisation/:orgID", s.ParseRequest(createOrganisationRequest{}), s.CreateOrganisation())
 	auth.GET("/_matrix/client/r0/notification", s.ViewNotifications())
-	auth.POST("/_matrix/client/r0/notification", s.PostNotifications())
+	auth.POST("/_matrix/client/r0/notification", s.ParseRequest(createNotificationRequest{}), s.CreateNotification())
 	auth.PATCH("/_matrix/client/r0/notification/:id/read", s.ReadNotifications())
 
 	admin := auth.Use(s.IsAdmin())
