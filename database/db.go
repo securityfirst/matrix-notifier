@@ -129,35 +129,23 @@ func FindOrganisationUserByUserOrg(d DB, userID, orgID string) (*OrganisationUse
 }
 
 // ListNotifications returns a list of the unread notifications for the selected User since the specified time.
-func ListNotifications(d DB, userID string, since int64, types ...string) ([]Notification, error) {
+func ListNotifications(d DB, userID string, since int64, types ...interface{}) ([]Notification, error) {
 	var (
 		query = &strings.Builder{}
 		args  = make([]interface{}, 2, len(types)+2)
 	)
 	args[0], args[1] = userID, since
 	fmt.Fprint(query, `
-select
-        n.*, coalesce(read_at,0) as read_at
+select n.*, coalesce(read_at,0) as read_at
 from
-        notification n join organisation_user ou on (ou.organisation_id = n.destination)
-        left join notification_user u on (n.id = u.notification_id and u.user_id = $1)
-        
+	notification n join organisation_user ou on (ou.organisation_id = n.destination)
+	left join notification_user u on (n.id = u.notification_id and u.user_id = $1)    
 where
-        ou.user_id = $1 and
-        n.created_at >= $2 and
-        n.destination = ou.organisation_id and
-        (ou.admin > 0`)
-	if len(types) != 0 {
-		fmt.Fprint(query, " or n.type in (")
-		for i, t := range types {
-			args = append(args, t)
-			if i != 0 {
-				fmt.Fprint(query, ", ")
-			}
-			fmt.Fprintf(query, "$%d", len(args))
-		}
-		fmt.Fprint(query, `)`)
-	}
+	ou.user_id = $1 and
+	n.created_at >= $2 and
+	n.destination = ou.organisation_id and
+	(ou.admin > 0`)
+	addArgsList(query, &args, " or n.type in (", ")", types)
 	fmt.Fprint(query, `)`)
 
 	var l []struct {
@@ -173,4 +161,19 @@ where
 		list[i].ReadAt = l[i].ReadAt
 	}
 	return list, nil
+}
+
+func addArgsList(q *strings.Builder, args *[]interface{}, prefix, suffix string, list []interface{}) {
+	if len(list) == 0 {
+		return
+	}
+	fmt.Fprint(q, " or n.type in (")
+	for i, t := range list {
+		*args = append(*args, t)
+		if i != 0 {
+			fmt.Fprint(q, ", ")
+		}
+		fmt.Fprintf(q, "$%d", len(*args))
+	}
+	fmt.Fprint(q, `)`)
 }
