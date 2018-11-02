@@ -163,6 +163,37 @@ where
 	return list, nil
 }
 
+func MarkAsRead(db DB, userID, notification string, read int64, types ...interface{}) error {
+	var (
+		query = &strings.Builder{}
+		args  = make([]interface{}, 3, len(types)+3)
+	)
+	args[0], args[1], args[2] = userID, notification, read
+	fmt.Fprint(query, `insert into notification_user (user_id, notification_id, read_at)
+select
+	$1, n.id, $3
+from
+	notification n join organisation_user ou on (ou.organisation_id = n.destination)        
+where
+	ou.user_id = $1 and
+	n.destination = ou.organisation_id and
+	(ou.admin > 0 `)
+	addArgsList(query, &args, " or n.type in (", ")", types)
+	fmt.Fprint(query, `) and n.id = $2`)
+	res, err := db.Exec(query.String(), args...)
+	if err != nil {
+		return err
+	}
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func addArgsList(q *strings.Builder, args *[]interface{}, prefix, suffix string, list []interface{}) {
 	if len(list) == 0 {
 		return

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	"gopkg.in/gorp.v2"
 )
 
@@ -45,7 +46,6 @@ func init() {
 		log.Fatalln("Error:", err)
 	}
 	dbMap = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
-	dbMap.TraceOn(">", log.New(os.Stdout, "", 0))
 }
 
 func TestInit(t *testing.T) {
@@ -90,14 +90,26 @@ func TestQueries(t *testing.T) {
 		not("0014", "3", "3", "d", now),
 		not("0015", "3", "3", "e", now),
 		not("0016", "3", "3", "f", now),
-		nu("0001", "1", now), nu("0002", "1", now), nu("0003", "1", now),
-		nu("0002", "3", now), nu("0003", "3", now), nu("0011", "3", now), nu("0012", "3", now),
+	}
+	var nu = [][2]string{
+		{"0001", "user1"}, {"0002", "user1"}, {"0003", "user1"},
+		{"0002", "user3"}, {"0003", "user3"}, {"0011", "user3"}, {"0012", "user3"},
 	}
 	for _, r := range records {
 		if err := Create(dbMap, r); err != nil {
 			log.Fatal(r, err)
 		}
 	}
+	for _, n := range nu {
+		if err := MarkAsRead(dbMap, n[1], n[0], now, "a", "b", "c", "d"); err != nil {
+			log.Fatal(n, err)
+		}
+	}
+
+	if err, ok := MarkAsRead(dbMap, "user1", "0001", now, "a", "b", "c", "d").(*pq.Error); !ok || err.Code != "23505" {
+		log.Fatalf("Expected %#v, got %#v", sql.ErrNoRows, err)
+	}
+
 	for user, count := range map[string][2]int{"user1": [2]int{6, 3}, "user2": [2]int{4, 0}, "user3": [2]int{10, 4}} {
 		list, err := ListNotifications(dbMap, user, now, "a", "b", "c", "d")
 		if err != nil {

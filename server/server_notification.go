@@ -100,17 +100,17 @@ func (s *Server) validateNotification(n *database.Notification) error {
 		}
 	case NVote:
 		if n.Content == nil || n.Content.PoolID == "" {
-			return ErrMissingQuestion
+			return ErrMissingPool
 		}
 		var q database.Notification
 		if _, err := database.Get(s.db, &q, n.Content.PoolID); err != nil {
 			if err == sql.ErrNoRows {
-				return ErrQuestionNotFound
+				return ErrPoolNotFound
 			}
 			return ErrUnknown.with(err)
 		}
 		if q.Type != NPool || q.Destination != n.Destination {
-			return ErrQuestionNotFound
+			return ErrPoolNotFound
 		}
 	}
 	return nil
@@ -119,6 +119,17 @@ func (s *Server) validateNotification(n *database.Notification) error {
 // ReadNotifications marks one/all Notification as read.
 func (s *Server) ReadNotifications() gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
-		//TODO implement!
+		err := database.MarkAsRead(s.db, c.MustGet("user").(string), c.Param("notID"), time.Now().Unix(),
+			NPanic, NAnnouncement, NQuestion, NAnswer, NPool)
+		switch {
+		case err == nil:
+			c.Status(http.StatusOK)
+		case database.IsDuplicate(err):
+			c.Status(http.StatusNoContent)
+		case err == sql.ErrNoRows:
+			ErrNotificationNotFound.abort(c)
+		default:
+			ErrUnknown.with(err).abort(c)
+		}
 	})
 }
