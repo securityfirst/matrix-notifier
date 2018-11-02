@@ -119,7 +119,11 @@ func (s *Server) validateNotification(n *database.Notification) error {
 // ReadNotifications marks one/all Notification as read.
 func (s *Server) ReadNotifications() gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
-		err := database.MarkAsRead(s.db, c.MustGet("user").(string), c.Param("notID"), time.Now().Unix(),
+		id := c.Param("notID")
+		if id == "all" {
+			id = ""
+		}
+		err := database.MarkAsRead(s.db, c.MustGet("user").(string), id, time.Now().Unix(),
 			NPanic, NAnnouncement, NQuestion, NAnswer, NPool)
 		switch {
 		case err == nil:

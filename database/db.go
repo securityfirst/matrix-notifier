@@ -166,20 +166,27 @@ where
 func MarkAsRead(db DB, userID, notification string, read int64, types ...interface{}) error {
 	var (
 		query = &strings.Builder{}
-		args  = make([]interface{}, 3, len(types)+3)
+		args  = make([]interface{}, 2, len(types)+3)
 	)
-	args[0], args[1], args[2] = userID, notification, read
+	args[0], args[1] = userID, read
 	fmt.Fprint(query, `insert into notification_user (user_id, notification_id, read_at)
 select
-	$1, n.id, $3
+	$1, n.id, $2
 from
-	notification n join organisation_user ou on (ou.organisation_id = n.destination)        
+	notification n join organisation_user ou on (ou.organisation_id = n.destination)
+	left join notification_user u on (n.id = u.notification_id and u.user_id = $1)        
 where
 	ou.user_id = $1 and
+	u.user_id is null and
 	n.destination = ou.organisation_id and
 	(ou.admin > 0 `)
 	addArgsList(query, &args, " or n.type in (", ")", types)
-	fmt.Fprint(query, `) and n.id = $2`)
+	fmt.Fprint(query, `)`)
+	if notification != "" {
+		addArgsList(query, &args, " and n.id in (", ")", []interface{}{notification})
+	} else {
+
+	}
 	res, err := db.Exec(query.String(), args...)
 	if err != nil {
 		return err
@@ -198,7 +205,7 @@ func addArgsList(q *strings.Builder, args *[]interface{}, prefix, suffix string,
 	if len(list) == 0 {
 		return
 	}
-	fmt.Fprint(q, " or n.type in (")
+	fmt.Fprint(q, prefix)
 	for i, t := range list {
 		*args = append(*args, t)
 		if i != 0 {

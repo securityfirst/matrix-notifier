@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lib/pq"
 	"gopkg.in/gorp.v2"
 )
 
@@ -106,11 +105,18 @@ func TestQueries(t *testing.T) {
 		}
 	}
 
-	if err, ok := MarkAsRead(dbMap, "user1", "0001", now, "a", "b", "c", "d").(*pq.Error); !ok || err.Code != "23505" {
+	if err := MarkAsRead(dbMap, "user1", "0001", now, "a", "b", "c", "d"); err != sql.ErrNoRows {
 		log.Fatalf("Expected %#v, got %#v", sql.ErrNoRows, err)
 	}
+	testNotificationCount(t, now, map[string][2]int{"user1": [2]int{6, 3}, "user2": [2]int{4, 0}, "user3": [2]int{10, 4}})
+	if err := MarkAsRead(dbMap, "user1", "", now, "a", "b", "c", "d"); err != nil {
+		log.Fatal(err)
+	}
+	testNotificationCount(t, now, map[string][2]int{"user1": [2]int{6, 6}, "user2": [2]int{4, 0}, "user3": [2]int{10, 4}})
+}
 
-	for user, count := range map[string][2]int{"user1": [2]int{6, 3}, "user2": [2]int{4, 0}, "user3": [2]int{10, 4}} {
+func testNotificationCount(t *testing.T, now int64, count map[string][2]int) {
+	for user, count := range count {
 		list, err := ListNotifications(dbMap, user, now, "a", "b", "c", "d")
 		if err != nil {
 			log.Fatal(err)
@@ -134,5 +140,4 @@ func TestQueries(t *testing.T) {
 			log.Fatalf("%s: expected %d, got %d", user, count[1], read)
 		}
 	}
-
 }
