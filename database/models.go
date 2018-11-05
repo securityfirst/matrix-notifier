@@ -73,14 +73,13 @@ func (Notification) unique() [][]string {
 type Content struct {
 	Text        string   `json:"text"`
 	CollapseKey string   `json:"collapse_key,omitempty"`
-	QuestionID  string   `json:"question_id,omitempty"`
-	PoolID      string   `json:"pool_id,omitempty"`
+	RefID       string   `json:"ref_id,omitempty"`
 	Choices     []Choice `json:"choices,omitempty"`
 }
 
 type Choice struct {
-	Label string
-	Value string
+	Label string `json:"label,omitempty"`
+	Value string `json:"value,omitempty"`
 }
 
 // Value encodes a sql value

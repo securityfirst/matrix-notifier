@@ -28,7 +28,7 @@ const (
 	NAnnouncement = "announcement" // Announcement, sent by admin, seen by user
 	NQuestion     = "question"     // Question, sent by admin, seen by user
 	NAnswer       = "answer"       // Answer, sent by user, seen by user, requires Question
-	NPool         = "pool  "       // Pool, sent by admin, seen by user
+	NPoll         = "poll  "       // Poll, sent by admin, seen by user
 	NVote         = "vote"         // Vote, sent by user, seen by admin, requires Pool
 )
 

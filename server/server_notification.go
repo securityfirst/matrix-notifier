@@ -23,7 +23,7 @@ func (s *Server) ViewNotifications() gin.HandlerFunc {
 			since = t
 		}
 		list, err := database.ListNotifications(s.db, c.MustGet("user").(string), since.Unix(),
-			NPanic, NAnnouncement, NQuestion, NAnswer, NPool)
+			NPanic, NAnnouncement, NQuestion, NAnswer, NPoll)
 		if err != nil {
 			ErrUnknown.with(err).abort(c)
 			return
@@ -55,7 +55,7 @@ func (s *Server) CreateNotification() gin.HandlerFunc {
 		}
 		// no questions for simple users
 		if ou.Level == LvlUser {
-			for _, t := range []string{NBroadcast, NAnnouncement, NQuestion, NPool} {
+			for _, t := range []string{NBroadcast, NAnnouncement, NQuestion, NPoll} {
 				if req.Type == t {
 					ErrUnauthorized.abort(c)
 					return
@@ -72,7 +72,11 @@ func (s *Server) CreateNotification() gin.HandlerFunc {
 			Content:     req.Content,
 		}
 		if err := s.validateNotification(&n); err != nil {
-			ErrMissingQuestion.abort(c)
+			if rerr, ok := err.(ErrorResponse); !ok {
+				ErrUnknown.with(err).abort(c)
+			} else {
+				rerr.abort(c)
+			}
 			return
 		}
 		if err := database.Create(s.db, &n); err != nil {
@@ -83,34 +87,19 @@ func (s *Server) CreateNotification() gin.HandlerFunc {
 }
 
 func (s *Server) validateNotification(n *database.Notification) error {
-	switch n.Type {
-	case NAnswer:
-		if n.Content == nil || n.Content.QuestionID == "" {
-			return ErrMissingQuestion
+	if n.Type == NAnswer || n.Type == NVote {
+		if n.Content == nil || n.Content.RefID == "" {
+			return ErrMissingReference
 		}
 		var q database.Notification
-		if _, err := database.Get(s.db, &q, n.Content.QuestionID); err != nil {
+		if _, err := database.Get(s.db, &q, n.Content.RefID); err != nil {
 			if err == sql.ErrNoRows {
-				return ErrQuestionNotFound
+				return ErrReferenceNotFound
 			}
 			return ErrUnknown.with(err)
 		}
-		if q.Type != NQuestion || q.Destination != n.Destination {
-			return ErrQuestionNotFound
-		}
-	case NVote:
-		if n.Content == nil || n.Content.PoolID == "" {
-			return ErrMissingPool
-		}
-		var q database.Notification
-		if _, err := database.Get(s.db, &q, n.Content.PoolID); err != nil {
-			if err == sql.ErrNoRows {
-				return ErrPoolNotFound
-			}
-			return ErrUnknown.with(err)
-		}
-		if q.Type != NPool || q.Destination != n.Destination {
-			return ErrPoolNotFound
+		if q.Type == NQuestion && n.Type != NAnswer || q.Type == NPoll && n.Type != NVote || q.Destination != n.Destination {
+			return ErrReferenceNotFound
 		}
 	}
 	return nil
@@ -124,7 +113,7 @@ func (s *Server) ReadNotifications() gin.HandlerFunc {
 			id = ""
 		}
 		err := database.MarkAsRead(s.db, c.MustGet("user").(string), id, time.Now().Unix(),
-			NPanic, NAnnouncement, NQuestion, NAnswer, NPool)
+			NPanic, NAnnouncement, NQuestion, NAnswer, NPoll)
 		switch {
 		case err == nil:
 			c.Status(http.StatusOK)

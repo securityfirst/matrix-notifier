@@ -17,11 +17,9 @@ var (
 	ErrBadJSON              = ErrorResponse{http.StatusBadRequest, "BAD_JSON", "Please provide a valid JSON"}
 	ErrBadTimestamp         = ErrorResponse{http.StatusBadRequest, "BAD_TIMESTAMP", "Invalid RFC3339 timestamp."}
 	ErrBadEmail             = ErrorResponse{http.StatusBadRequest, "BAD_EMAIL", "Please provide a valid email"}
-	ErrMissingQuestion      = ErrorResponse{http.StatusBadRequest, "BAD_QUESTION", "Please specify a question ID."}
+	ErrMissingReference     = ErrorResponse{http.StatusBadRequest, "BAD_REFERENCE", "Please specify a reference ID."}
+	ErrReferenceNotFound    = ErrorResponse{http.StatusNotFound, "UNKNOWN_REFERENCE", "Reference not found."}
 	ErrNotificationNotFound = ErrorResponse{http.StatusNotFound, "UNKNOWN_NOTIFICATION", "Notification not found."}
-	ErrQuestionNotFound     = ErrorResponse{http.StatusNotFound, "UNKNOWN_QUESTION", "Question not found."}
-	ErrMissingPool          = ErrorResponse{http.StatusBadRequest, "BAD_POOL", "Please specify a Pool ID."}
-	ErrPoolNotFound         = ErrorResponse{http.StatusNotFound, "UNKNOWN_POOL", "Pool not found."}
 	ErrMissingToken         = ErrorResponse{http.StatusUnauthorized, "M_MISSING_TOKEN", "Missing access token."}
 	ErrUnknownToken         = ErrorResponse{http.StatusUnauthorized, "UNKNOWN_TOKEN", "Unknown Access Token."}
 	ErrUnauthorized         = ErrorResponse{http.StatusUnauthorized, "M_UNAUTHORIZED", "Not allowed"}
