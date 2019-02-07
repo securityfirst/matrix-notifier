@@ -14,56 +14,57 @@ servers:
   - url: comms.secfirst.org
     description: Security First
 paths:
-  '/_matrix/client/r0/organisation':
+  '/_matrix/client/r0/organisations':
     get:
-      summary: List of user's Organisations.
+      summary: List of user's Orgs.
       security:
         - AccessToken: []
+
       tags:
-        - Organisation
+        - Org
       responses:
         '200':
-          description: Organisation description.
+          description: Org description.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Subscription'
-  '/_matrix/client/r0/organisation/{orgID}':
+  '/_matrix/client/r0/organisations/{orgID}':
     parameters:
       - in: path
         name: orgID
-        description: Organisation ID
+        description: Org ID
         schema:
           type: string
         required: true
     get:
-      summary: Shows an organisation.
+      summary: Shows an Org.
       security:
         - AccessToken: []
       tags:
-        - Organisation
+        - Org
       responses:
         '200':
-          description: Organisation description.
+          description: Org description.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Organisation'
+                $ref: '#/components/schemas/Org'
     post:
-      summary: Creates a new organisation and sends an invite link (admin).
+      summary: Creates a new Org and sends an invite link (admin).
       security:
         - AccessToken: []
       tags:
-        - Organisation
+        - Org
       requestBody:
-        description: Organisation
+        description: Org
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Organisation'
+              $ref: '#/components/schemas/Org'
       responses:
         '201':
           description: Success.
@@ -71,11 +72,11 @@ paths:
           description: Invalid request.
         '409':
           description: Already used.
-  '/_matrix/client/r0/organisation/{orgID}/invite':
+  '/_matrix/client/r0/Org/{orgID}/invite':
     parameters:
       - in: path
         name: orgID
-        description: Organisation ID
+        description: Org ID
         schema:
           type: string
         required: true
@@ -84,7 +85,7 @@ paths:
       security:
         - AccessToken: []
       tags:
-        - Organisation
+        - Org
       requestBody:
         description: Invite
         required: true
@@ -100,20 +101,20 @@ paths:
         '409':
           description: Already used.
   # when logged in?
-  '/_matrix/client/r0/organisation/{orgID}/verify':
+  '/_matrix/client/r0/Org/{orgID}/verify':
     parameters:
       - in: path
         name: orgID
-        description: Organisation ID
+        description: Org ID
         schema:
           type: string
         required: true
     post:
-      summary: Creates a user and adds him to the organisation.
+      summary: Creates a user and adds him to the Org.
       security:
         - AccessToken: []
       tags:
-        - Organisation
+        - Org
       responses:
         '201':
           description: Success.
@@ -148,7 +149,7 @@ paths:
       responses:
         '204':
           description: Notification Updated.
-  #'/_matrix/client/r0/organisation/{orgID}/notification':
+  #'/_matrix/client/r0/Org/{orgID}/notification':
   #'/_matrix/client/r0/user/{userID}/notification':
   # notification can admin only
 
@@ -162,7 +163,7 @@ components:
       in: query
       name: access_token
   schemas:
-    Organisation:
+    Org:
       type: object
       properties:
         name:

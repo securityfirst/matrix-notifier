@@ -6,123 +6,109 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/oklog/ulid"
 	"github.com/securityfirst/matrix-notifier/database"
 )
 
 // ViewNotifications returns a list of notifications for the current user.
 func (s *Server) ViewNotifications() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
+	return handler(func(c *gin.Context) error {
 		var since time.Time
 		if s := c.Query("since"); s != "" {
 			t, err := time.Parse(time.RFC3339, s)
 			if err != nil {
-				ErrBadTimestamp.abort(c)
-				return
+				return ErrBadTimestamp
 			}
 			since = t
 		}
-		list, err := database.ListNotifications(s.db, c.MustGet("user").(string), since.Unix(),
-			NPanic, NAnnouncement, NQuestion, NAnswer, NPoll)
+		rooms, err := getRooms(c)
 		if err != nil {
-			ErrUnknown.with(err).abort(c)
-			return
+			return err
+		}
+		levels := make(map[string]int, len(rooms))
+		for _, id := range rooms {
+			o, err := getOrgLevel(c, &database.Org{RoomID: id})
+			if err != nil {
+				return err
+			}
+			levels[id] = o.Level
+		}
+		list, err := database.ListNotifications(s.db, since, getUser(c), levels, rulesView)
+		if err != nil {
+			return err
 		}
 		c.JSON(http.StatusOK, list)
+		return nil
 	})
 }
 
-type createNotificationRequest struct {
-	Destination string            `json:"destination,omitempty"`
-	Priority    int               `json:"priority,omitempty"`
-	Type        string            `json:"type,omitempty"`
-	Content     *database.Content `json:"content,omitempty"`
+func contains(s []string, v string) bool {
+	for _, a := range s {
+		if v == a {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateNotification creates a new Notification.
 func (s *Server) CreateNotification() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		req := c.MustGet("request").(*createNotificationRequest)
-		user, org := c.MustGet("user").(string), req.Destination
-		ou, err := database.FindOrganisationUserByUserOrg(s.db, user, org)
+	return handler(func(c *gin.Context) error {
+		n := c.MustGet("request").(*database.Notification)
+		rooms, err := getRooms(c)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				ErrUnauthorized.abort(c)
-			} else {
-				ErrUnknown.with(err).abort(c)
-			}
-			return
+			return err
 		}
-		// no questions for simple users
-		if ou.Level == LvlUser {
-			for _, t := range []string{NBroadcast, NAnnouncement, NQuestion, NPoll} {
-				if req.Type == t {
-					ErrUnauthorized.abort(c)
-					return
-				}
-			}
+		if !contains(rooms, n.RoomID) {
+			return ErrUnknownOrg
 		}
-		n := database.Notification{
-			ID:          ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String(),
-			UserID:      user,
-			Destination: req.Destination,
-			Priority:    req.Priority,
-			CreatedAt:   time.Now().Unix(),
-			Type:        req.Type,
-			Content:     req.Content,
+		v, err := s.db.Get(database.Org{}, n.RoomID)
+		if err != nil {
+			return err
 		}
-		if err := s.validateNotification(&n); err != nil {
-			if rerr, ok := err.(ErrorResponse); !ok {
-				ErrUnknown.with(err).abort(c)
-			} else {
-				rerr.abort(c)
-			}
-			return
+		orgLvl, err := getOrgLevel(c, v.(*database.Org))
+		if err != nil {
+			return err
 		}
-		if err := database.Create(s.db, &n); err != nil {
-			ErrUnknown.with(err).abort(c)
+		if rulesCreate[n.RoomID] > orgLvl.Level {
+			return ErrUnauthorized
+		}
+		n.ID, n.UserID, n.CreatedAt = newULID(), getUser(c), time.Now()
+		if err := s.validateNotification(n); err != nil {
+			return err
+		}
+		if err := database.Create(s.db, n); err != nil {
+			return err
 		}
 		c.Status(http.StatusCreated)
+		return nil
 	})
 }
 
 func (s *Server) validateNotification(n *database.Notification) error {
-	if n.Type == NAnswer || n.Type == NVote {
-		if n.Content == nil || n.Content.RefID == "" {
-			return ErrMissingReference
-		}
-		var q database.Notification
-		if _, err := database.Get(s.db, &q, n.Content.RefID); err != nil {
-			if err == sql.ErrNoRows {
-				return ErrReferenceNotFound
-			}
-			return ErrUnknown.with(err)
-		}
-		if q.Type == NQuestion && n.Type != NAnswer || q.Type == NPoll && n.Type != NVote || q.Destination != n.Destination {
+	if n.Type != NAnswer && n.Type != NVote {
+		return nil
+	}
+	if n.Content == nil || n.Content.RefID == "" {
+		return ErrMissingReference
+	}
+	q := database.Notification{}
+	if _, err := database.Get(s.db, &q, n.Content.RefID); err != nil {
+		if err == sql.ErrNoRows {
 			return ErrReferenceNotFound
 		}
+		return err
+	}
+	if q.RoomID != n.RoomID ||
+		q.Type == NQuestion && n.Type != NAnswer ||
+		q.Type == NPoll && n.Type != NVote {
+		return ErrReferenceNotFound
 	}
 	return nil
 }
 
-// ReadNotifications marks one/all Notification as read.
+// ReadNotifications updates the read notificaitons.
 func (s *Server) ReadNotifications() gin.HandlerFunc {
-	return gin.HandlerFunc(func(c *gin.Context) {
-		id := c.Param("notID")
-		if id == "all" {
-			id = ""
-		}
-		err := database.MarkAsRead(s.db, c.MustGet("user").(string), id, time.Now().Unix(),
-			NPanic, NAnnouncement, NQuestion, NAnswer, NPoll)
-		switch {
-		case err == nil:
-			c.Status(http.StatusOK)
-		case database.IsDuplicate(err):
-			c.Status(http.StatusNoContent)
-		case err == sql.ErrNoRows:
-			ErrNotificationNotFound.abort(c)
-		default:
-			ErrUnknown.with(err).abort(c)
-		}
+	return handler(func(c *gin.Context) error {
+		return database.MarkAsRead(s.db, getUser(c), time.Now())
 	})
 }

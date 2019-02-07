@@ -2,13 +2,15 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
-	"strings"
+	"time"
 
 	"github.com/lib/pq"
 
+	sq "github.com/Masterminds/squirrel"
 	gorp "gopkg.in/gorp.v2"
 )
+
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 // IsDuplicate checks if the error is a duplicate keyy violation.
 func IsDuplicate(err error) bool {
@@ -36,7 +38,7 @@ type DB interface {
 
 // InitDBMap initializes the DbMap and creates the tables.
 func InitDBMap(d *gorp.DbMap) error {
-	for _, t := range []table{Organisation{}, OrganisationUser{}, Notification{}, NotificationUser{}, User{}, UserThreepid{}} {
+	for _, t := range []table{Org{}, Notification{}, NotificationUser{}} {
 		table := d.AddTableWithName(t, t.name())
 		for i, s := range t.unique() {
 			switch {
@@ -64,154 +66,90 @@ func Update(d DB, i interface{}) error {
 	return err
 }
 
-// ListOrganisations returns the list of Organisations for a User.
-func ListOrganisations(d DB, userID string) ([]Organisation, error) {
-	var (
-		query = "select * from organisation"
-		args  = make([]interface{}, 0, 1)
-	)
-	if userID != "" {
-		query, args = query+" where userID = $1", append(args, userID)
-	}
-	list, err := d.Select(Organisation{}, query, args...)
+// GetOrgByName returns the selected Org by name
+func GetOrgByName(d DB, name string, ids ...string) (*Org, error) {
+	query, args, err := psql.Select("*").From(Org{}.name()).
+		Where(sq.Eq{"name": name, "room_id": ids}).ToSql()
 	if err != nil {
 		return nil, err
 	}
-	o := make([]Organisation, len(list))
+	var org Org
+	if err := d.SelectOne(&org, query, args...); err != nil {
+		return nil, err
+	}
+	return &org, nil
+}
+
+// ListOrgs returns the list of Orgs from their IDs
+func ListOrgs(d DB, ids ...string) ([]*Org, error) {
+	query, args, err := psql.Select("*").From(Org{}.name()).Where(sq.Eq{"room_id": ids}).ToSql()
+	if err != nil {
+		return nil, err
+	}
+	list, err := d.Select(Org{}, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	o := make([]*Org, len(list))
 	for i := range list {
-		o[i] = list[i].(Organisation)
+		o[i] = list[i].(*Org)
 	}
 	return o, nil
 }
 
-// UpdateOrganisationUser updates the user_id.
-func UpdateOrganisationUser(d DB, userID, hash string) error {
-	res, err := d.Exec("update organisation_user set user_id=$1 where hash=$2;", userID, hash)
-	if err != nil {
-		return err
-	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows != 1 {
-		return fmt.Errorf("%d rows affected", rows)
-	}
-	return nil
-}
-
-// FindEmailByUser returns the email for the selected User.
-func FindEmailByUser(d DB, userID string) (string, error) {
-	return d.SelectStr("select address from user_threepids where user_id = $1 and medium = $2", userID, "email")
-}
-
-// FindUserByToken returns the username with the selected Token.
-func FindUserByToken(d DB, token string) (string, error) {
-	return d.SelectStr("select user_id from access_tokens where token = $1", token)
-}
-
-// FindOrganisationUserByHash returns the OrganisationUser using the given hash.
-func FindOrganisationUserByHash(d DB, hash string) (*OrganisationUser, error) {
-	var ou OrganisationUser
-	if err := d.SelectOne(&ou, "select * from organisation_user where hash = $1", hash); err != nil {
-		return nil, err
-	}
-	return &ou, nil
-}
-
-// FindOrganisationUserByUserOrg returns the OrganisationUser using User and Organisation.
-func FindOrganisationUserByUserOrg(d DB, userID, orgID string) (*OrganisationUser, error) {
-	var ou OrganisationUser
-	if err := d.SelectOne(&ou, "select * from organisation_user where user_id = $1 and organisation_id = $2", userID, orgID); err != nil {
-		return nil, err
-	}
-	return &ou, nil
-}
-
-// ListNotifications returns a list of the unread notifications for the selected User since the specified time.
-func ListNotifications(d DB, userID string, since int64, types ...interface{}) ([]Notification, error) {
-	var (
-		query = &strings.Builder{}
-		args  = make([]interface{}, 2, len(types)+2)
-	)
-	args[0], args[1] = userID, since
-	fmt.Fprint(query, `
-select n.*, coalesce(read_at,0) as read_at
-from
-	notification n join organisation_user ou on (ou.organisation_id = n.destination)
-	left join notification_user u on (n.id = u.notification_id and u.user_id = $1)    
-where
-	ou.user_id = $1 and
-	n.created_at >= $2 and
-	n.destination = ou.organisation_id and
-	(ou.admin > 0`)
-	addArgsList(query, &args, " or n.type in (", ")", types)
-	fmt.Fprint(query, `)`)
-
-	var l []struct {
+// ListNotifications returns a list of notifications since the specified time.
+// levels is a power level per room, rules is the level per type
+func ListNotifications(d DB, since time.Time, userID string, levels, rules map[string]int) ([]*Notification, error) {
+	type N struct {
 		Notification
-		ReadAt int64 `db:"read_at"`
+		Read bool `db:"read"`
 	}
-	if _, err := d.Select(&l, query.String(), args...); err != nil {
+	filter := make(sq.Or, 0, len(levels))
+	for room, lvl := range levels {
+		var keys []string
+		for t, l := range rules {
+			if lvl >= l {
+				keys = append(keys, t)
+			}
+		}
+		filter = append(filter, sq.Eq{
+			"n.room_id": room,
+			"n.type":    keys,
+		})
+	}
+	query, args, err := psql.Select(`n.*, (last_read is not null and last_read > n.created_at) as read`).From(Notification{}.name()+` n`).
+		LeftJoin(NotificationUser{}.name()+` u on (u.user_id = ?)`, userID).Where(sq.And{
+		sq.Gt{"n.created_at": since}, filter}).ToSql()
+	if err != nil {
 		return nil, err
 	}
-	var list = make([]Notification, len(l))
-	for i := range l {
-		list[i] = l[i].Notification
-		list[i].ReadAt = l[i].ReadAt
+	if err != nil {
+		return nil, err
 	}
-	return list, nil
+	list, err := d.Select(&N{}, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	n := make([]*Notification, len(list))
+	for i := range list {
+		v := list[i].(*N)
+		n[i] = &v.Notification
+		n[i].Read = v.Read
+	}
+	return n, nil
 }
 
-func MarkAsRead(db DB, userID, notification string, read int64, types ...interface{}) error {
-	var (
-		query = &strings.Builder{}
-		args  = make([]interface{}, 2, len(types)+3)
-	)
-	args[0], args[1] = userID, read
-	fmt.Fprint(query, `insert into notification_user (user_id, notification_id, read_at)
-select
-	$1, n.id, $2
-from
-	notification n join organisation_user ou on (ou.organisation_id = n.destination)
-	left join notification_user u on (n.id = u.notification_id and u.user_id = $1)        
-where
-	ou.user_id = $1 and
-	u.user_id is null and
-	n.destination = ou.organisation_id and
-	(ou.admin > 0 `)
-	addArgsList(query, &args, " or n.type in (", ")", types)
-	fmt.Fprint(query, `)`)
-	if notification != "" {
-		addArgsList(query, &args, " and n.id in (", ")", []interface{}{notification})
+// MarkAsRead upserts read time for a user
+func MarkAsRead(db DB, userID string, t time.Time) error {
+	v, err := db.Get(&NotificationUser{}, userID)
+	if err != nil {
+		return err
+	}
+	n := NotificationUser{UserID: userID, LastRead: t}
+	if v == nil {
+		err = db.Insert(&n)
 	} else {
-
+		_, err = db.Update(&n)
 	}
-	res, err := db.Exec(query.String(), args...)
-	if err != nil {
-		return err
-	}
-	count, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func addArgsList(q *strings.Builder, args *[]interface{}, prefix, suffix string, list []interface{}) {
-	if len(list) == 0 {
-		return
-	}
-	fmt.Fprint(q, prefix)
-	for i, t := range list {
-		*args = append(*args, t)
-		if i != 0 {
-			fmt.Fprint(q, ", ")
-		}
-		fmt.Fprintf(q, "$%d", len(*args))
-	}
-	fmt.Fprint(q, `)`)
+	return err
 }

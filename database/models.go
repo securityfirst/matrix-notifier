@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"time"
 )
 
 type table interface {
@@ -10,66 +11,39 @@ type table interface {
 	unique() [][]string
 }
 
-// Organisation is a group of Users.
-type Organisation struct {
-	ID      string `db:"id,primarykey"`
-	Name    string `db:"name"`
-	Package string `db:"package"`
-	Intent  string `db:"intent"`
-	Enabled bool   `db:"enabled"`
+// Org is a group of Users.
+type Org struct {
+	RoomID  string `db:"room_id,primarykey" json:"room_id"`
+	Name    string `db:"name" json:"name"`
+	Package string `db:"package" json:"package"`
+	Intent  string `db:"intent" json:"intent"`
 }
 
-func (Organisation) name() string { return "organisation" }
+func (Org) name() string { return "organisations" }
 
-func (Organisation) unique() [][]string {
-	return [][]string{[]string{"id"}, []string{"name"}, []string{"package"}}
+func (Org) unique() [][]string {
+	return [][]string{{"room_id"}, {"name"}, {"package"}}
 }
-
-// OrganisationUser is the User connection to an Organisation.
-type OrganisationUser struct {
-	OrganisationID string `db:"organisation_id"`
-	UserID         string `db:"user_id"`
-	Hash           string `db:"hash"`
-	Level          int    `db:"admin"`
-}
-
-func (OrganisationUser) name() string { return "organisation_user" }
-
-func (OrganisationUser) unique() [][]string {
-	return [][]string{[]string{"hash"}, []string{"organisation_id", "user_id"}}
-}
-
-// UserThreepid is a third party identity for a User.
-type UserThreepid struct {
-	UserID      string `db:"user_id"`
-	Medium      string `db:"medium"`
-	Address     string `db:"address"`
-	ValidatedAt int64  `db:"validated_at"`
-	AddedAt     int64  `db:"added_at"`
-}
-
-func (UserThreepid) name() string { return "user_threepids" }
-
-func (UserThreepid) unique() [][]string { return nil }
 
 // Notification is the notification model.
 type Notification struct {
-	ID          string   `db:"id,primarykey" json:"id"`
-	UserID      string   `db:"user_id" json:"user_id"`
-	Destination string   `db:"destination" json:"destination"`
-	Priority    int      `db:"priority" json:"priority"`
-	CreatedAt   int64    `db:"created_at" json:"created_at"`
-	Type        string   `db:"type" json:"type"`
-	Content     *Content `db:"content" json:"content"`
-	ReadAt      int64    `db:"-" json:"reat_at"`
+	ID        string    `db:"id,primarykey" json:"id"`
+	RoomID    string    `db:"room_id" json:"room_id"`
+	UserID    string    `db:"user_id" json:"user_id"`
+	Priority  int       `db:"priority" json:"priority"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	Type      string    `db:"type" json:"type"`
+	Content   *Content  `db:"content" json:"content"`
+	Read      bool      `db:"-" json:"read,omitempty"`
 }
 
-func (Notification) name() string { return "notification" }
+func (Notification) name() string { return "notifications" }
 
 func (Notification) unique() [][]string {
-	return [][]string{[]string{"id"}}
+	return [][]string{{"id"}}
 }
 
+// Content is the Notification main content.
 type Content struct {
 	Text        string   `json:"text"`
 	CollapseKey string   `json:"collapse_key,omitempty"`
@@ -77,6 +51,7 @@ type Content struct {
 	Choices     []Choice `json:"choices,omitempty"`
 }
 
+// Choice is an option for an Answer or a Pool
 type Choice struct {
 	Label string `json:"label,omitempty"`
 	Value string `json:"value,omitempty"`
@@ -96,41 +71,17 @@ func (c *Content) Value() (driver.Value, error) {
 
 // Scan decodes a sql value
 func (c *Content) Scan(value interface{}) error {
-	return json.Unmarshal(value.([]byte), c)
+	return json.Unmarshal([]byte(value.(string)), c)
 }
 
+// NotificationUser marks read Notification for a User
 type NotificationUser struct {
-	NotificationID string `db:"notification_id"`
-	UserID         string `db:"user_id"`
-	ReadAt         int64  `db:"read_at"`
+	UserID   string    `db:"user_id,primarykey"`
+	LastRead time.Time `db:"last_read"`
 }
 
-func (NotificationUser) name() string { return "notification_user" }
+func (NotificationUser) name() string { return "notification_users" }
 
 func (NotificationUser) unique() [][]string {
-	return [][]string{[]string{"notification_id", "user_id"}}
+	return [][]string{{"user_id"}}
 }
-
-type AccessToken struct {
-	ID       string `db:"id"`
-	UserID   string `db:"user_id"`
-	DeviceID string `db:"device_id"`
-	Token    string `db:"token"`
-	LastUsed string `db:"last_used"`
-}
-
-type User struct {
-	Name                    string `db:"name"`
-	PasswordHash            string `db:"password_hash"`
-	CreationTS              int64  `db:"creation_ts"`
-	Admin                   bool   `db:"admin"`
-	UpgradeTS               int64  `db:"upgrade_ts"`
-	IsGuest                 bool   `db:"is_guest"`
-	AppserviceID            string `db:"appservice_id"`
-	ConsentVersion          string `db:"consent_version"`
-	ConsentServerNoticeSent string `db:"consent_server_notice_sent"`
-}
-
-func (User) name() string { return "users" }
-
-func (User) unique() [][]string { return [][]string{[]string{"name"}} }

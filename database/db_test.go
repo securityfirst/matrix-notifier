@@ -56,11 +56,11 @@ func TestInit(t *testing.T) {
 func user(s string) *User {
 	return &User{Name: "user" + s}
 }
-func org(s string) *Organisation {
-	return &Organisation{ID: "org" + s, Name: "org" + s, Package: "com.org" + s}
+func org(s string) *Org {
+	return &Org{ID: "org" + s, Name: "org" + s, Package: "com.org" + s}
 }
-func ou(o, u string, l int) *OrganisationUser {
-	return &OrganisationUser{UserID: "user" + u, OrganisationID: "org" + o, Level: l, Hash: o + "-" + u}
+func ou(o, u string, l int) *OrgUser {
+	return &OrgUser{UserID: "user" + u, OrgID: "org" + o, Level: l, Hash: o + "-" + u}
 }
 func not(id, o, u, t string, created int64) *Notification {
 	return &Notification{ID: id, UserID: "user" + u, Destination: "org" + o, Type: t, CreatedAt: created}
