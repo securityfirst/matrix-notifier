@@ -21,15 +21,7 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatalln("DB:", err)
 		}
-		mailer, err := conf.GetMailer()
-		if err != nil {
-			logger.Fatalln("Mailer:", err)
-		}
-		matrix, err := conf.GetMatrix()
-		if err != nil {
-			logger.Fatalln("Matrix:", err)
-		}
-		s := server.NewServer(conf.Server.Address, db, matrix, mailer, []byte(conf.Server.Secret))
+		s := server.NewServer(conf.Server.Address, conf.Matrix.Address, db)
 		logger.Println("Listening on:", conf.Server.Address)
 		go func() {
 			if err := s.Run(); err != nil && err != http.ErrServerClosed {
@@ -46,7 +38,6 @@ var runCmd = &cobra.Command{
 		if err := s.Shutdown(ctx); err != nil {
 			logger.Fatalln("Shutdown:", err)
 		}
-
 	},
 }
 

@@ -22,7 +22,7 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "matrix-notifier",
 	Short: "Matrix server for custom notifications",
-	Long:  `A web server that uses matrix user system to handle organisations and notifications.`,
+	Long:  `A web server that uses matrix user system to handle Orgs and notifications.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
