@@ -73,14 +73,17 @@ func NewServer(address, matrix string, db *gorp.DbMap) *Server {
 		db:     db,
 		matrix: matrix,
 	}
+	auth := engine.Group("/_matrix/client/r0/", s.Authenticate())
 
-	auth := engine.Use(s.Authenticate())
-	auth.GET("/_matrix/client/r0/organisation/", s.ListOrgs())
-	auth.GET("/_matrix/client/r0/organisation/:name", s.GetOrgByName("name"))
-	auth.POST("/_matrix/client/r0/organisation/:orgID", s.ParseRequest(database.Org{}), s.CreateOrg())
-	auth.GET("/_matrix/client/r0/notification/", s.ViewNotifications())
-	auth.POST("/_matrix/client/r0/notification/", s.ParseRequest(database.Notification{}), s.CreateNotification())
-	auth.PATCH("/_matrix/client/r0/notification/", s.ReadNotifications())
+	org := auth.Group("/organisation/")
+	org.GET("", s.ListOrgs())
+	org.POST("", s.ParseRequest(database.Org{}), s.CreateOrg())
+	org.GET(":name", s.GetOrgByName("name"))
+
+	not := auth.Group("/notification/")
+	not.GET("", s.ViewNotifications())
+	not.POST("", s.ParseRequest(database.Notification{}), s.CreateNotification())
+	not.PATCH("", s.ReadNotifications())
 
 	return &s
 }
